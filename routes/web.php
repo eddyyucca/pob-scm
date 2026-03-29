@@ -71,6 +71,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/notifications/send',                       [NotificationController::class, 'sendReminder'])->name('notifications.send');
     Route::get('/report',                                         [ReportController::class, 'index'])->name('report.index');
     Route::post('/notifications/send-scheduled',              [NotificationController::class, 'sendScheduled'])->name('notifications.send-scheduled');
+    Route::post('/notifications/send-one',                   [NotificationController::class, 'sendOne'])->name('notifications.send-one');
     Route::post('/notifications/send-friday',                [NotificationController::class, 'sendFridayAll'])->name('notifications.send-friday');
     Route::post('/notifications/contacts',                   [NotificationController::class, 'storeContact'])->name('notifications.contact.store');
     Route::delete('/notifications/contacts/{contact}',       [NotificationController::class, 'destroyContact'])->name('notifications.contact.destroy');

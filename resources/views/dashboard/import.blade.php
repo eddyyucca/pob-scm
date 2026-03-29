@@ -2,13 +2,11 @@
 
 @section('title', 'Import Data Excel')
 
+@section('sidebar-nav')
+@include('partials.sidebar')
+@endsection
+
 @section('content')
-<div class="d-flex" style="min-height:100vh;">
-
-    {{-- Sidebar --}}
-    @include('partials.sidebar')
-
-    {{-- Main --}}
     <main class="flex-grow-1 p-4" style="background:#f0f4f8;">
         <div class="mb-4">
             <h4 class="fw-bold mb-0">Import Data Excel</h4>
@@ -168,7 +166,7 @@
                 </div>
             </div>
         </div>
-    </main>
+    
 </div>
 @endsection
 

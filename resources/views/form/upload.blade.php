@@ -105,8 +105,16 @@
         <div style="background:#fff;border-radius:8px;padding:10px 14px;font-size:.82rem;color:#7f1d1d;" id="mismatch-hint">
             @if($mm['diff'] > 0)
             File Excel memiliki <strong>{{ $mm['diff'] }} karyawan lebih banyak</strong>. Kurangi <strong>{{ $mm['diff'] }} baris</strong> atau koreksi angka POB.
-            @else
+            @elseif($mm['diff'] < 0)
             File Excel memiliki <strong>{{ abs($mm['diff']) }} karyawan lebih sedikit</strong>. Tambah <strong>{{ abs($mm['diff']) }} baris</strong> atau koreksi angka POB.
+            @else
+            Jumlah terdeteksi sama, namun ada baris yang dibuang karena tidak valid (nama kosong atau ID duplikat).
+            @endif
+            @if(isset($mm['raw_rows']))
+            <div class="mt-1" style="color:#92400e;font-size:.78rem;">
+                ℹ️ Baris mentah di Excel: <strong>{{ $mm['raw_rows'] }}</strong> &mdash;
+                Baris valid (lolos validasi): <strong>{{ $mm['uploaded'] }}</strong>
+            </div>
             @endif
         </div>
     </div>

@@ -354,7 +354,7 @@ class PobFormController extends Controller
     // ─────────────────────────────────────────────
     public function downloadGuide()
     {
-        $path = public_path('panduan-pob.pdf');
+        $path = public_path('Tutorial_Pengisian_POB.pdf');
 
         if (!file_exists($path)) {
             abort(404, 'File panduan belum tersedia. Hubungi administrator.');

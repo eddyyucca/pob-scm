@@ -1,11 +1,11 @@
 @extends('layouts.app')
 @section('title','Manajemen User')
-@section('content')
-<div class="d-flex">
+@section('sidebar-nav')
 @include('partials.sidebar')
-<main style="flex:1;padding:22px;background:#f0f4f8;">
+@endsection
 
-    <div class="d-flex justify-content-between align-items-center mb-3">
+@section('content')
+<div class="d-flex justify-content-between align-items-center mb-3">
         <div>
             <h5 class="fw-bold mb-0">Manajemen User</h5>
             <small class="text-muted">Kelola akun admin yang dapat mengakses dashboard</small>
@@ -88,6 +88,5 @@
         </div>
     </div>
 
-</main>
-</div>
+
 @endsection

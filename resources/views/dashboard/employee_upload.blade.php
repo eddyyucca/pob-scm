@@ -1,11 +1,10 @@
 @extends('layouts.app')
 @section('title','Upload Data Karyawan POB')
-@section('content')
-<div class="d-flex" style="min-height:100vh;">
-
-{{-- Sidebar --}}
+@section('sidebar-nav')
 @include('partials.sidebar')
+@endsection
 
+@section('content')
 <main class="flex-grow-1 p-4" style="background:#f0f4f8;">
     <div class="mb-4">
         <h4 class="fw-bold mb-0">Upload Data Karyawan POB</h4>
@@ -145,7 +144,7 @@
             @endif
         </div>
     </div>
-</main>
+
 </div>
 
 <script>

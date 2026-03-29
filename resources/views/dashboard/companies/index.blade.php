@@ -1,11 +1,11 @@
 @extends('layouts.app')
 @section('title','Manajemen Perusahaan')
-@section('content')
-<div class="d-flex">
+@section('sidebar-nav')
 @include('partials.sidebar')
-<main style="flex:1;padding:22px;background:#f0f4f8;">
+@endsection
 
-    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+@section('content')
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <div>
             <h5 class="fw-bold mb-0">Manajemen Perusahaan</h5>
             <small class="text-muted">Kelola daftar perusahaan kontraktor</small>
@@ -116,6 +116,5 @@
         @endif
     </div>
 
-</main>
-</div>
+
 @endsection

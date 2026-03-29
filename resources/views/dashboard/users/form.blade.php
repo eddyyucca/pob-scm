@@ -1,11 +1,11 @@
 @extends('layouts.app')
 @section('title', $user ? 'Edit User' : 'Tambah User')
-@section('content')
-<div class="d-flex">
+@section('sidebar-nav')
 @include('partials.sidebar')
-<main style="flex:1;padding:22px;background:#f0f4f8;">
+@endsection
 
-    <div class="mb-3">
+@section('content')
+<div class="mb-3">
         <a href="{{ route('users.index') }}" class="text-muted text-decoration-none small">
             <i class="bi bi-arrow-left me-1"></i>Kembali ke Daftar User
         </a>
@@ -77,6 +77,5 @@
         </div>
     </div>
 
-</main>
-</div>
+
 @endsection

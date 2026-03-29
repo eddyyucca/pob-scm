@@ -1,11 +1,11 @@
 @extends('layouts.app')
 @section('title','Laporan POB')
-@section('content')
-<div class="d-flex">
+@section('sidebar-nav')
 @include('partials.sidebar')
-<main style="flex:1;padding:22px;background:#f0f4f8;overflow-x:hidden;">
+@endsection
 
-    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+@section('content')
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <div>
             <h5 class="fw-bold mb-0">Laporan POB Harian</h5>
             <small class="text-muted">Lihat, edit, dan hapus data laporan dari mitra</small>
@@ -127,6 +127,5 @@
         @endif
     </div>
 
-</main>
-</div>
+
 @endsection

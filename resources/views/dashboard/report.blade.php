@@ -15,10 +15,11 @@
 .kard-title{font-size:.82rem;font-weight:700;color:#374151;}
 </style>
 @endpush
-@section('content')
-<div class="d-flex">
+@section('sidebar-nav')
 @include('partials.sidebar')
-<main style="flex:1;padding:22px;background:#f0f4f8;overflow-x:hidden;">
+@endsection
+
+@section('content')
 
     {{-- Header --}}
     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
@@ -395,8 +396,6 @@
     </div>
     @endif
 
-</main>
-</div>
 @endsection
 
 @push('scripts')

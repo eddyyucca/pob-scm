@@ -1,13 +1,12 @@
 @extends('layouts.app')
 @section('title','Data Karyawan POB')
-@section('content')
-<div class="d-flex" style="min-height:100vh;">
-
-{{-- Sidebar --}}
+@section('sidebar-nav')
 @include('partials.sidebar')
+@endsection
 
-<main class="flex-grow-1 p-4" style="background:#f0f4f8;overflow-x:hidden;">
-    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+@section('content')
+{{-- Sidebar --}}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <div>
             <h4 class="fw-bold mb-0">Data Karyawan Onsite (POB)</h4>
             <small class="text-muted">Daftar karyawan yang sedang berada di area operasi</small>
@@ -158,6 +157,4 @@
             @endif
         </div>
     </div>
-</main>
-</div>
 @endsection

@@ -8,13 +8,10 @@
 <body style="background:#1a3c5e;min-height:100vh;display:flex;align-items:center;">
 <div class="container"><div class="row justify-content-center">
 <div class="col-md-4">
-   <div class="text-center mb-4">
-    <img src="https://media.licdn.com/dms/image/v2/D560BAQH-4NKYZuKb5A/company-logo_200_200/B56ZYgesv1HoAI-/0/1744301641123?e=1775692800&v=beta&t=T35fKEIIQZ0XooMkYKRdQPwY91QRxjBheWWmw49cLFU"
-         alt="SCM Nickel"
-         style="width:56px;height:56px;border-radius:10px;object-fit:cover;margin-bottom:8px;">
-    <div style="font-size:.95rem;font-weight:700;color:#fff;">SCM Nickel</div>
-    <div style="font-size:.68rem;opacity:.4;color:#fff;">POB & Manpower System</div>
-</div>
+    <div class="text-center mb-4 text-white">
+        <h4 class="fw-bold">SCM Nickel</h4>
+        <small style="opacity:.6;">POB & Manpower System</small>
+    </div>
     <div class="card border-0 shadow-lg" style="border-radius:14px;">
         <div class="card-body p-4">
             <h5 class="fw-bold mb-1">Login Admin</h5>

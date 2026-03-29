@@ -4,31 +4,25 @@
 @push('styles')
 <style>
 :root{--blue:#2563eb;--green:#16a34a;--orange:#ea580c;--purple:#7c3aed;--teal:#0891b2;}
-.sb{width:220px;min-height:100vh;background:#1a3c5e;flex-shrink:0;display:flex;flex-direction:column;padding:14px 10px;}
-.sb-logo{text-align:center;padding:8px 0 20px;color:#fff;}
-.sb-logo h6{font-size:1rem;font-weight:700;margin:0;}
-.sb-logo small{font-size:.68rem;opacity:.4;}
-.sb a{display:flex;align-items:center;gap:9px;padding:9px 12px;border-radius:8px;color:rgba(255,255,255,.7);text-decoration:none;font-size:.84rem;margin-bottom:2px;transition:all .15s;}
-.sb a:hover,.sb a.on{background:rgba(255,255,255,.15);color:#fff;}
-.kard{background:#fff;border-radius:12px;box-shadow:0 1px 8px rgba(0,0,0,.07);border:none;}
-.kard-hdr{padding:13px 16px 10px;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center;}
-.kard-title{font-size:.8rem;font-weight:700;color:#374151;}
-.pill-row{display:flex;background:#f1f5f9;border-radius:20px;padding:2px;}
-.pill-row a{border-radius:18px;padding:3px 13px;font-size:.75rem;color:#64748b;text-decoration:none;transition:all .15s;}
-.pill-row a.on{background:#2563eb;color:#fff;}
+/* Extra responsive overrides khusus dashboard */
+@media (max-width:575.98px) {
+    .kard-title { font-size:.75rem; }
+    .card-body { padding: .75rem !important; }
+    .kard-hdr { padding: 10px 12px 8px; }
+    #trendBtns { gap: 2px !important; }
+    #trendBtns button { font-size:.68rem !important; padding: 2px 8px !important; }
+}
 </style>
 @endpush
 
-@section('content')
-<div class="d-flex">
-
-{{-- SIDEBAR --}}
+@section('sidebar-nav')
 @include('partials.sidebar')
+@endsection
 
+@section('content')
+{{-- SIDEBAR --}}
 {{-- MAIN --}}
-<main style="flex:1;padding:22px;overflow-x:hidden;">
-
-    {{-- Topbar --}}
+{{-- Topbar --}}
     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <div>
             <h5 class="fw-bold mb-0" style="color:#1e293b;">Dashboard POB & Manpower</h5>
@@ -89,7 +83,7 @@
     @endphp
     <div class="row g-3 mb-3">
         @foreach($cards as $c)
-        <div class="col-6 col-xl">
+        <div class="col-6 col-md-4 col-xl">
             <div class="kard" style="border-top:3px solid var({{ $c[3] }});">
                 <div class="card-body px-3 py-3">
                     <div class="d-flex justify-content-between align-items-start mb-2">
@@ -119,7 +113,7 @@
                         <button class="btn btn-outline-secondary btn-sm" style="border-radius:20px;font-size:.73rem;" onclick="swTrend('monthly',this)">12 Bulan</button>
                     </div>
                 </div>
-                <div class="card-body p-3" style="position:relative;height:230px;">
+                <div class="card-body p-3" style="position:relative;height:220px;min-height:160px;">
                     <canvas id="cTrend"></canvas>
                 </div>
             </div>
@@ -193,7 +187,7 @@
                     <span class="kard-title">📋 Status Laporan Hari Ini</span>
                     <small class="text-muted" style="font-size:.7rem;">{{ \Carbon\Carbon::parse($date)->format('d M Y') }}</small>
                 </div>
-                <div style="max-height:200px;overflow-y:auto;">
+                <div style="max-height:260px;overflow-y:auto;overflow-x:auto;-webkit-overflow-scrolling:touch;">
                     <table class="table table-sm table-hover mb-0 align-middle" style="font-size:.8rem;">
                         <thead style="background:#f8fafc;position:sticky;top:0;">
                             <tr>
@@ -311,8 +305,6 @@
         </div>
     </div>
 
-</main>
-</div>
 @endsection
 
 @push('scripts')

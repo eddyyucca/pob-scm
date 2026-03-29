@@ -1,11 +1,11 @@
 @extends('layouts.app')
 @section('title','Detail Laporan POB')
-@section('content')
-<div class="d-flex">
+@section('sidebar-nav')
 @include('partials.sidebar')
-<main style="flex:1;padding:22px;background:#f0f4f8;overflow-x:hidden;">
+@endsection
 
-    <div class="mb-3 d-flex justify-content-between align-items-center">
+@section('content')
+<div class="mb-3 d-flex justify-content-between align-items-center">
         <a href="{{ route('pob-entries.index') }}" class="text-muted text-decoration-none small">
             <i class="bi bi-arrow-left me-1"></i>Kembali ke Daftar Laporan
         </a>
@@ -135,6 +135,5 @@
         @endif
     </div>
 
-</main>
-</div>
+
 @endsection
