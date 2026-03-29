@@ -6,29 +6,7 @@
 <div class="d-flex" style="min-height:100vh;">
 
     {{-- Sidebar --}}
-    <nav class="sidebar d-flex flex-column p-3" style="width:240px;min-height:100vh;background:#1a3c5e;color:#fff;flex-shrink:0;">
-        <div class="mb-4 mt-2 text-center">
-            <div style="font-size:1.1rem;font-weight:700;letter-spacing:1px;">⛏ SCM Nickel</div>
-            <div style="font-size:.75rem;opacity:.6;">POB & Manpower System</div>
-        </div>
-        <a href="{{ route('dashboard') }}" class="nav-link text-white py-2 px-3 rounded mb-1" style="opacity:.75;">
-            <i class="bi bi-speedometer2 me-2"></i>Dashboard
-        </a>
-        <a href="{{ route('dashboard.import') }}" class="nav-link text-white py-2 px-3 rounded mb-1 active" style="background:rgba(255,255,255,.15);">
-            <i class="bi bi-upload me-2"></i>Import Excel
-        </a>
-        <a href="{{ route('dashboard.export') }}" class="nav-link text-white py-2 px-3 rounded mb-1" style="opacity:.75;">
-            <i class="bi bi-download me-2"></i>Export CSV
-        </a>
-        <div class="mt-auto pt-3 border-top border-secondary">
-            <form method="POST" action="{{ route('logout') }}">
-                @csrf
-                <button class="btn btn-sm btn-outline-light w-100">
-                    <i class="bi bi-box-arrow-right me-1"></i>Logout
-                </button>
-            </form>
-        </div>
-    </nav>
+    @include('partials.sidebar')
 
     {{-- Main --}}
     <main class="flex-grow-1 p-4" style="background:#f0f4f8;">

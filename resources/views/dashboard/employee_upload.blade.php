@@ -4,21 +4,7 @@
 <div class="d-flex" style="min-height:100vh;">
 
 {{-- Sidebar --}}
-<nav class="d-flex flex-column p-3" style="width:220px;min-height:100vh;background:#1a3c5e;color:#fff;flex-shrink:0;">
-    <div class="mb-4 mt-2 text-center">
-        <div style="font-size:1.05rem;font-weight:700;">&#x26CF; SCM Nickel</div>
-        <div style="font-size:.72rem;opacity:.55;">POB & Manpower System</div>
-    </div>
-    <a href="{{ route('dashboard') }}" class="nav-link text-white py-2 px-3 rounded mb-1" style="opacity:.7;"><i class="bi bi-speedometer2 me-2"></i>Dashboard</a>
-    <a href="{{ route('employees.index') }}" class="nav-link text-white py-2 px-3 rounded mb-1" style="opacity:.7;"><i class="bi bi-people me-2"></i>Data Karyawan</a>
-    <a href="{{ route('employees.upload') }}" class="nav-link text-white py-2 px-3 rounded mb-1" style="background:rgba(255,255,255,.15);"><i class="bi bi-person-plus me-2"></i>Upload Karyawan</a>
-    <a href="{{ route('dashboard.import') }}" class="nav-link text-white py-2 px-3 rounded mb-1" style="opacity:.7;"><i class="bi bi-upload me-2"></i>Import POB</a>
-    <div class="mt-auto pt-3 border-top border-secondary">
-        <form method="POST" action="{{ route('logout') }}">@csrf
-            <button class="btn btn-sm btn-outline-light w-100"><i class="bi bi-box-arrow-right me-1"></i>Logout</button>
-        </form>
-    </div>
-</nav>
+@include('partials.sidebar')
 
 <main class="flex-grow-1 p-4" style="background:#f0f4f8;">
     <div class="mb-4">

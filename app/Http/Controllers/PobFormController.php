@@ -6,8 +6,6 @@ use App\Models\Company;
 use App\Models\PobEmployee;
 use App\Models\PobEntry;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Validator;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class PobFormController extends Controller
@@ -22,7 +20,8 @@ class PobFormController extends Controller
     }
 
     // ─────────────────────────────────────────────
-    // STEP 1: Simpan data POB → redirect ke upload
+    // STEP 1: Validasi & simpan ke SESSION saja
+    //         Belum masuk database
     // ─────────────────────────────────────────────
     public function store(Request $request)
     {
@@ -34,26 +33,22 @@ class PobFormController extends Controller
             'informed_by'    => 'required|string|max:100',
             'contact_wa'     => 'required|string|max:30',
         ], [
-            'total_pob.min'       => 'Total POB minimal 1 orang.',
-            'total_manpower.min'  => 'Total Manpower minimal 1 orang.',
-            'total_manpower.gte'  => 'Total Manpower tidak boleh kurang dari Total POB.',
+            'total_pob.min'      => 'Total POB minimal 1 orang.',
+            'total_manpower.min' => 'Total Manpower minimal 1 orang.',
+            'total_manpower.gte' => 'Total Manpower tidak boleh kurang dari Total POB.',
         ]);
 
-        $entry = PobEntry::updateOrCreate(
-            ['company_id' => $validated['company_id'], 'date' => $validated['date']],
-            $validated
-        );
-
-        // Simpan entry ID ke session untuk dipakai di step 2
+        // Simpan ke session — BELUM ke database
         session([
-            'pob_entry_id'   => $entry->id,
-            'pob_company_id' => $validated['company_id'],
-            'pob_date'       => $validated['date'],
-            'pob_total'      => $validated['total_pob'],
+            'pob_company_id'     => (int) $validated['company_id'],
+            'pob_date'           => $validated['date'],
+            'pob_total'          => (int) $validated['total_pob'],
+            'pob_total_manpower' => (int) $validated['total_manpower'],
+            'pob_informed_by'    => $validated['informed_by'],
+            'pob_contact_wa'     => $validated['contact_wa'],
         ]);
 
-        return redirect()->route('form.upload')
-            ->with('step1_success', true);
+        return redirect()->route('form.upload');
     }
 
     // ─────────────────────────────────────────────
@@ -61,23 +56,37 @@ class PobFormController extends Controller
     // ─────────────────────────────────────────────
     public function showUpload()
     {
-        if (!session('pob_entry_id')) {
+        if (!session('pob_company_id') || !session('pob_date')) {
             return redirect()->route('form.index')
                 ->withErrors(['Sesi habis. Silakan isi data POB terlebih dahulu.']);
         }
 
-        $entry   = PobEntry::with('company')->find(session('pob_entry_id'));
         $company = Company::find(session('pob_company_id'));
+
+        if (!$company) {
+            return redirect()->route('form.index')
+                ->withErrors(['Perusahaan tidak ditemukan. Silakan isi ulang.']);
+        }
+
+        // Buat objek dummy untuk view (belum ada di DB)
+        $entry = (object) [
+            'total_pob'      => session('pob_total'),
+            'total_manpower' => session('pob_total_manpower'),
+            'date'           => session('pob_date'),
+            'informed_by'    => session('pob_informed_by'),
+            'contact_wa'     => session('pob_contact_wa'),
+        ];
 
         return view('form.upload', compact('entry', 'company'));
     }
 
     // ─────────────────────────────────────────────
-    // STEP 2: Proses upload Excel karyawan
+    // STEP 2: Proses upload Excel
+    //         Jika valid → simpan POB entry + karyawan ke DB
     // ─────────────────────────────────────────────
     public function processUpload(Request $request)
     {
-        if (!session('pob_entry_id')) {
+        if (!session('pob_company_id') || !session('pob_date')) {
             return redirect()->route('form.index')
                 ->withErrors(['Sesi habis. Silakan isi ulang data POB.']);
         }
@@ -90,13 +99,20 @@ class PobFormController extends Controller
             'employee_file.max'      => 'Ukuran file maksimal 10MB.',
         ]);
 
-        $entryId   = session('pob_entry_id');
-        $companyId = session('pob_company_id');
-        $date      = session('pob_date');
-        $pobTotal  = session('pob_total');
-        $entry     = PobEntry::with('company')->find($entryId);
+        $companyId  = (int) session('pob_company_id');
+        $date       = session('pob_date');
+        $pobTotal   = (int) session('pob_total');
+        $manpower   = (int) session('pob_total_manpower');
+        $informedBy = session('pob_informed_by');
+        $contactWa  = session('pob_contact_wa');
+        $company    = Company::find($companyId);
 
-        // Baca file
+        if (!$company) {
+            return redirect()->route('form.index')
+                ->withErrors(['Perusahaan tidak ditemukan. Silakan isi ulang.']);
+        }
+
+        // ── Baca file ──
         try {
             $rows = $this->readExcel($request->file('employee_file')->getPathname());
         } catch (\Exception $e) {
@@ -116,26 +132,25 @@ class PobFormController extends Controller
             ]);
         }
 
-        // ── PARSE & VALIDASI semua baris dulu ──
-        $parsed   = [];
-        $errors   = [];
-        $seenIds  = []; // deteksi duplikat ID dalam file
+        // ── Parse & validasi semua baris ──
+        $parsed  = [];
+        $errors  = [];
+        $seenIds = [];
 
         foreach (array_slice($rows, 1) as $idx => $row) {
             $lineNum = $idx + 2;
             $name    = trim($row[$colMap['name']] ?? '');
 
-            if (empty($name)) continue; // skip baris kosong
+            if ($name === '') continue; // skip baris benar-benar kosong
 
             $idRaw    = trim($row[$colMap['id_number'] ?? -1] ?? '');
             $idNumber = $idRaw !== '' ? $idRaw : null;
             $position = trim($row[$colMap['position']   ?? -1] ?? '') ?: null;
             $dept     = trim($row[$colMap['department']  ?? -1] ?? '') ?: null;
-
-            // Deteksi tipe ID
-            $idType   = 'minepermit';
-            $empType  = 'employee';
             $typeRaw  = strtolower(trim($row[$colMap['employee_type'] ?? -1] ?? ''));
+
+            $idType  = 'minepermit';
+            $empType = 'employee';
 
             if (in_array($typeRaw, ['visitor','tamu','guest'])) {
                 $empType = 'visitor';
@@ -145,24 +160,23 @@ class PobFormController extends Controller
                 $idType = 'ktp';
             }
 
-            // ── VALIDASI ──
             $rowErrors = [];
 
             if (mb_strlen($name) < 2) {
                 $rowErrors[] = "Nama terlalu pendek";
             }
 
-            if ($idNumber && strlen($idNumber) < 3) {
-                $rowErrors[] = "Nomor ID terlalu pendek";
-            }
-
-            // Duplikat ID dalam file yang sama
-            if ($idNumber) {
-                $idKey = strtoupper($idNumber);
-                if (isset($seenIds[$idKey])) {
-                    $rowErrors[] = "ID '{$idNumber}' duplikat dengan baris {$seenIds[$idKey]}";
+            // ID opsional — jika diisi cek panjang dan duplikat
+            if (!empty($idNumber)) {
+                if (strlen($idNumber) < 3) {
+                    $rowErrors[] = "Nomor ID terlalu pendek (minimal 3 karakter)";
                 } else {
-                    $seenIds[$idKey] = $lineNum;
+                    $idKey = strtoupper(trim($idNumber));
+                    if (isset($seenIds[$idKey])) {
+                        $rowErrors[] = "Nomor ID '{$idNumber}' duplikat dengan baris {$seenIds[$idKey]}";
+                    } else {
+                        $seenIds[$idKey] = $lineNum;
+                    }
                 }
             }
 
@@ -172,10 +186,9 @@ class PobFormController extends Controller
             }
 
             $parsed[] = [
-                'pob_entry_id'  => $entryId,
                 'company_id'    => $companyId,
                 'date'          => $date,
-                'id_number'     => $idNumber ?? 'N/A',
+                'id_number'     => !empty($idNumber) ? strtoupper(trim($idNumber)) : 'N/A-'.$lineNum,
                 'id_type'       => $idType,
                 'name'          => $name,
                 'position'      => $position,
@@ -184,62 +197,80 @@ class PobFormController extends Controller
             ];
         }
 
-        // Jika terlalu banyak error, stop
-        if (count($errors) > 0 && count($parsed) === 0) {
-            return back()->withErrors([
-                'employee_file' => 'Semua baris gagal divalidasi. Periksa kembali file Excel Anda.',
-                'row_errors'    => $errors,
-            ])->with('row_errors', $errors);
+        // ── Tolak jika ada baris error ──
+        if (count($errors) > 0) {
+            return back()
+                ->withErrors(['employee_file' => 'File ditolak. Perbaiki ' . count($errors) . ' kesalahan berikut lalu upload ulang.'])
+                ->with('row_errors', $errors);
         }
 
-        // ── CEK JUMLAH vs POB yang dilaporkan ──
+        // ── Cek jumlah ──
         $uploadCount = count($parsed);
-        $mismatch    = false;
+
         if ($uploadCount !== $pobTotal) {
-            $mismatch = true;
-            $entry->update(['total_pob' => $uploadCount]);
+            $rawDataRows = count(array_filter(
+                array_slice($rows, 1),
+                fn($r) => !empty(trim(implode('', array_map('strval', $r))))
+            ));
+
+            return back()
+                ->withErrors(['employee_file' =>
+                    "Jumlah karyawan di file ({$uploadCount} orang) tidak sesuai dengan Total POB ({$pobTotal} orang)."
+                ])
+                ->with('pob_mismatch', [
+                    'uploaded' => $uploadCount,
+                    'expected' => $pobTotal,
+                    'diff'     => $uploadCount - $pobTotal,
+                    'raw_rows' => $rawDataRows,
+                ]);
         }
 
-        // ── DELETE-THEN-INSERT per (company_id + date) ──
-        // Upload ulang hari yang sama = replace total
-        // Histori hari lain tetap aman karena filter by date
-        $oldCount = PobEmployee::where('company_id', $companyId)
-            ->whereDate('date', $date)
-            ->count();
+        // ── SEMUA VALID — baru simpan ke database ──
+        $entry = PobEntry::updateOrCreate(
+            ['company_id' => $companyId, 'date' => $date],
+            [
+                'total_pob'      => $uploadCount,
+                'total_manpower' => $manpower,
+                'informed_by'    => $informedBy,
+                'contact_wa'     => $contactWa,
+            ]
+        );
 
+        // Hapus data karyawan lama untuk entry+tanggal ini, insert ulang
         PobEmployee::where('company_id', $companyId)
             ->whereDate('date', $date)
             ->delete();
 
-        // Insert semua sekaligus per 200 baris agar tidak timeout
         $now    = now();
         $chunks = array_chunk($parsed, 200);
         foreach ($chunks as $chunk) {
-            $insertRows = array_map(fn($d) => array_merge($d, [
-                'created_at' => $now,
-                'updated_at' => $now,
+            $rows_insert = array_map(fn($d) => array_merge($d, [
+                'pob_entry_id' => $entry->id,
+                'created_at'   => $now,
+                'updated_at'   => $now,
             ]), $chunk);
-            PobEmployee::insert($insertRows);
+            PobEmployee::insert($rows_insert);
         }
 
-        $newCount     = max(0, $uploadCount - $oldCount);
-        $updated      = min($oldCount, $uploadCount);
-        $removedCount = max(0, $oldCount - $uploadCount);
+        $oldCount = PobEmployee::where('pob_entry_id', $entry->id)->count();
 
         // Clear session
-        session()->forget(['pob_entry_id', 'pob_company_id', 'pob_date', 'pob_total']);
+        session()->forget([
+            'pob_company_id','pob_date','pob_total',
+            'pob_total_manpower','pob_informed_by','pob_contact_wa',
+        ]);
 
         return redirect()->route('form.done')->with('upload_result', [
-            'company'       => $entry->company->name,
-            'date'          => $date,
-            'total_pob'     => $uploadCount,
-            'total_mp'      => $entry->fresh()->total_manpower,
-            'new'           => $newCount,
-            'updated'       => $updated,
-            'removed'       => $removedCount,
-            'mismatch'      => $mismatch,
-            'original_pob'  => $pobTotal,
-            'row_errors'    => $errors,
+            'company'      => $company->name,
+            'date'         => $date,
+            'total_pob'    => $uploadCount,
+            'total_mp'     => $manpower,
+            'new'          => $uploadCount,
+            'updated'      => 0,
+            'removed'      => 0,
+            'mismatch'     => false,
+            'original_pob' => $pobTotal,
+            'row_errors'   => [],
         ]);
     }
 
@@ -260,69 +291,49 @@ class PobFormController extends Controller
     public function downloadTemplate()
     {
         $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
-        $sheet = $spreadsheet->getActiveSheet();
+        $sheet       = $spreadsheet->getActiveSheet();
         $sheet->setTitle('Template POB');
 
         $headers = ['ID / MinePermit / KTP', 'Nama Lengkap', 'Jabatan', 'Departemen', 'Tipe (employee/visitor)'];
         $cols    = ['A','B','C','D','E'];
         $widths  = [24, 30, 22, 22, 22];
 
-        // Style header
         foreach ($headers as $i => $h) {
             $cell = $cols[$i].'1';
             $sheet->setCellValue($cell, $h);
             $sheet->getStyle($cell)->applyFromArray([
-                'font' => ['bold'=>true, 'color'=>['rgb'=>'FFFFFF'], 'size'=>11],
-                'fill' => ['fillType'=>\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor'=>['rgb'=>'1a3c5e']],
-                'alignment' => ['horizontal'=>\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER, 'vertical'=>\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
-                'borders' => ['allBorders'=>['borderStyle'=>\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN, 'color'=>['rgb'=>'ffffff']]],
+                'font'      => ['bold'=>true,'color'=>['rgb'=>'FFFFFF'],'size'=>11],
+                'fill'      => ['fillType'=>\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,'startColor'=>['rgb'=>'1a3c5e']],
+                'alignment' => ['horizontal'=>\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
+                                'vertical'  =>\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
+                'borders'   => ['allBorders'=>['borderStyle'=>\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,'color'=>['rgb'=>'ffffff']]],
             ]);
             $sheet->getColumnDimension($cols[$i])->setWidth($widths[$i]);
         }
         $sheet->getRowDimension(1)->setRowHeight(24);
 
-        // Data contoh
+        // Baris contoh
         $samples = [
-            ['MP-2024-001234', 'Ahmad Fauzi Ramadhan',   'Operator Alat Berat', 'Mining Operations', 'employee'],
-            ['MP-2024-005678', 'Budi Santoso Wijaya',    'Safety Officer',       'HSE',               'employee'],
-            ['3212345678901234','Cindy Maharani',         'Auditor Eksternal',    'Eksternal',         'visitor'],
-            ['MP-2024-009101', 'Dedi Kurniawan',          'Mekanik Senior',       'Maintenance',       'employee'],
-            ['MP-2024-009202', 'Eko Prasetyo',            'Supervisor Tambang',   'Mining Operations', 'employee'],
+            ['MP-2024-001234',   'Ahmad Fauzi Ramadhan', 'Operator Alat Berat',  'Mining Operations', 'employee'],
+            ['MP-2024-005678',   'Budi Santoso Wijaya',  'Safety Officer',        'HSE',               'employee'],
+            ['3212345678901234', 'Cindy Maharani',        'Auditor Eksternal',     'Eksternal',         'visitor'],
+            ['MP-2024-009101',   'Dedi Kurniawan',        'Mekanik Senior',        'Maintenance',       'employee'],
+            ['MP-2024-009202',   'Eko Prasetyo',          'Supervisor Tambang',    'Mining Operations', 'employee'],
         ];
 
-        $rowColors = ['F8FAFC', 'FFFFFF'];
         foreach ($samples as $r => $row) {
             $rowNum = $r + 2;
             foreach ($row as $c => $val) {
                 $cell = $cols[$c].$rowNum;
                 $sheet->setCellValue($cell, $val);
                 $sheet->getStyle($cell)->applyFromArray([
-                    'fill' => ['fillType'=>\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor'=>['rgb'=>$rowColors[$r%2]]],
-                    'borders' => ['allBorders'=>['borderStyle'=>\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN, 'color'=>['rgb'=>'E2E8F0']]],
+                    'fill'      => ['fillType'=>\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                                    'startColor'=>['rgb'=>$r%2===0?'F8FAFC':'FFFFFF']],
+                    'borders'   => ['allBorders'=>['borderStyle'=>\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,'color'=>['rgb'=>'E2E8F0']]],
                     'alignment' => ['vertical'=>\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
                 ]);
             }
             $sheet->getRowDimension($rowNum)->setRowHeight(20);
-        }
-
-        // Catatan
-        $noteRow = count($samples) + 3;
-        $notes = [
-            ['A'.$noteRow,     '⚠ PANDUAN PENGISIAN:', '1E293B', true],
-            ['A'.($noteRow+1), '• Kolom Nama Lengkap wajib diisi, tidak boleh kosong.', '475569', false],
-            ['A'.($noteRow+2), '• ID/MinePermit: isi nomor permit (contoh: MP-2024-XXXXXX). Untuk visitor, isi nomor KTP (16 digit angka).', '475569', false],
-            ['A'.($noteRow+3), '• Jabatan & Departemen: opsional tapi sangat direkomendasikan untuk laporan yang lengkap.', '475569', false],
-            ['A'.($noteRow+4), '• Tipe: isi "employee" untuk karyawan tetap/kontrak, "visitor" untuk tamu/auditor/non-karyawan.', '475569', false],
-            ['A'.($noteRow+5), '• Hapus baris contoh di atas sebelum diupload. Baris header (baris 1) JANGAN dihapus.', 'DC2626', false],
-            ['A'.($noteRow+6), '• Jika karyawan sudah ada di database, data akan diperbarui (bukan duplikat).', '475569', false],
-            ['A'.($noteRow+7), '• Jumlah baris karyawan akan menentukan Total POB final.', '475569', false],
-        ];
-
-        foreach ($notes as [$cell, $text, $color, $bold]) {
-            $sheet->setCellValue($cell, $text);
-            $sheet->mergeCells($cell.':'.$cols[4].substr($cell,1));
-            $sheet->getStyle($cell)->getFont()->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('FF'.$color))->setBold($bold);
-            $sheet->getStyle($cell)->getAlignment()->setWrapText(true);
         }
 
         $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
@@ -339,17 +350,39 @@ class PobFormController extends Controller
     }
 
     // ─────────────────────────────────────────────
+    // DOWNLOAD PANDUAN PDF
+    // ─────────────────────────────────────────────
+    public function downloadGuide()
+    {
+        $path = public_path('panduan-pob.pdf');
+
+        if (!file_exists($path)) {
+            abort(404, 'File panduan belum tersedia. Hubungi administrator.');
+        }
+
+        return response()->download($path, 'Panduan_Pengisian_POB.pdf');
+    }
+
+    // ─────────────────────────────────────────────
     // HELPERS
     // ─────────────────────────────────────────────
     private function readExcel(string $path): array
     {
         $spreadsheet = IOFactory::load($path);
-        return $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
+        $sheet       = $spreadsheet->getActiveSheet();
+        $data        = $sheet->toArray(null, true, true, false);
+
+        // Buang baris trailing yang kosong semua
+        while (!empty($data) && empty(array_filter(array_map('strval', end($data))))) {
+            array_pop($data);
+        }
+
+        return array_values($data);
     }
 
     private function detectColumns(array $header): array
     {
-        $map = [];
+        $map      = [];
         $patterns = [
             'id_number'     => ['id','minepermit','mine permit','ktp','nik','no id','nomor','id number','permit'],
             'name'          => ['nama','name','nama karyawan','nama lengkap','full name','employee name'],
