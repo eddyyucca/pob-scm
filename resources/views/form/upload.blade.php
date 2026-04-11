@@ -155,6 +155,21 @@
         </div>
         <input type="file" id="employee_file" name="employee_file" accept=".xlsx,.xls,.csv" class="d-none">
 
+        {{-- Peringatan MinePermit tidak berawalan C --}}
+        <div id="permitWarningBox" class="d-none mb-3" style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:14px 16px;">
+            <div style="font-weight:700;color:#ea580c;font-size:.85rem;margin-bottom:8px;">
+                <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                <span id="permitWarnTitle">Nomor MinePermit tidak berawalan "C"</span>
+            </div>
+            <div style="font-size:.78rem;color:#7c2d12;margin-bottom:8px;" id="permitWarnDesc">
+                Nomor MinePermit selalu diawali huruf <strong>C</strong>. Baris berikut terdeteksi mengisi nomor yang bukan MinePermit.
+                Jika karyawan tersebut adalah <strong>Visitor/Tamu</strong>, ubah kolom <em>Tipe</em> menjadi <code>visitor</code>.
+            </div>
+            <div class="preview-wrap" style="max-height:150px;">
+                <div style="padding:8px 12px;" id="permitWarnList"></div>
+            </div>
+        </div>
+
         {{-- Count info --}}
         <div id="previewInfo" class="d-none mb-3 px-3 py-2 rounded d-flex justify-content-between align-items-center"
              style="background:#f8fafc;border:1px solid #e2e8f0;">
@@ -357,12 +372,59 @@ function readFile(file) {
     reader.readAsArrayBuffer(file);
 }
 
+function detectColIndex(header, needles) {
+    for (let i = 0; i < header.length; i++) {
+        const h = String(header[i] || '').toLowerCase().trim();
+        if (needles.some(n => h.includes(n))) return i;
+    }
+    return -1;
+}
+
 function processData(data) {
     if (!data || data.length < 2) return;
     const header = data[0];
     const rows   = data.slice(1).filter(r => r.some(c => String(c).trim() !== ''));
     const count  = rows.length;
     const t      = LANG[window._currentLang || 'id'];
+
+    // ── Deteksi kolom ID dan Tipe ──
+    const idCol   = detectColIndex(header, ['id','minepermit','mine permit','ktp','nik','no id','nomor','permit']);
+    const typeCol = detectColIndex(header, ['tipe','type','kategori','jenis','employee type']);
+
+    // ── Validasi MinePermit harus berawalan C ──
+    const permitErrors = [];
+    rows.forEach((row, i) => {
+        const idVal   = idCol   >= 0 ? String(row[idCol]   || '').trim() : '';
+        const typeVal = typeCol >= 0 ? String(row[typeCol]  || '').toLowerCase().trim() : '';
+
+        if (!idVal) return; // ID kosong — skip
+
+        const isVisitor = ['visitor','tamu','guest'].includes(typeVal);
+        const isKtp16   = /^\d{16}$/.test(idVal); // 16 digit angka = NIK
+
+        // Jika bukan visitor dan bukan KTP-16-digit, ID harus berawalan C
+        if (!isVisitor && !isKtp16 && !/^C/i.test(idVal)) {
+            const nameCol = detectColIndex(header, ['nama','name','nama karyawan','nama lengkap','full name']);
+            const name    = nameCol >= 0 ? String(row[nameCol] || '').trim() : '';
+            permitErrors.push(
+                `Baris ${i+2}${name ? ' ('+name+')' : ''}: ID "<strong>${idVal}</strong>" bukan MinePermit — `
+                + `MinePermit selalu berawalan <strong>C</strong>. `
+                + `Jika visitor, ubah kolom Tipe menjadi <em>visitor</em>.`
+            );
+        }
+    });
+
+    const warnBox  = document.getElementById('permitWarningBox');
+    const warnList = document.getElementById('permitWarnList');
+    if (permitErrors.length > 0) {
+        warnList.innerHTML = permitErrors.map(e =>
+            `<div class="err-row" style="color:#92400e;border-bottom:1px solid #fed7aa;">⚠ ${e}</div>`
+        ).join('');
+        warnBox.classList.remove('d-none');
+    } else {
+        warnBox.classList.add('d-none');
+        warnList.innerHTML = '';
+    }
 
     document.getElementById('previewInfo').classList.remove('d-none');
     document.getElementById('previewCount').textContent = count;
@@ -388,12 +450,23 @@ function processData(data) {
         header.map(h => `<th style="padding:4px 8px;white-space:nowrap;">${h||'–'}</th>`).join('');
 
     const tb = document.getElementById('previewBody');
-    tb.innerHTML = rows.slice(0,5).map((row,i) =>
-        `<tr style="background:${i%2===0?'#f8fafc':'#fff'};">
+    tb.innerHTML = rows.slice(0,5).map((row,i) => {
+        const idVal   = idCol   >= 0 ? String(row[idCol]   || '').trim() : '';
+        const typeVal = typeCol >= 0 ? String(row[typeCol]  || '').toLowerCase().trim() : '';
+        const isVisitor = ['visitor','tamu','guest'].includes(typeVal);
+        const isKtp16   = /^\d{16}$/.test(idVal);
+        const badId     = idVal && !isVisitor && !isKtp16 && !/^C/i.test(idVal);
+
+        return `<tr style="background:${badId?'#fff7ed':i%2===0?'#f8fafc':'#fff'};">
             <td style="padding:3px 8px;color:#94a3b8;">${i+1}</td>
-            ${row.map(c=>`<td style="padding:3px 8px;">${c||'<span style="color:#cbd5e1;">—</span>'}</td>`).join('')}
-        </tr>`
-    ).join('');
+            ${row.map((c,ci) => {
+                const isIdCell = ci === idCol && badId;
+                return `<td style="padding:3px 8px;${isIdCell?'color:#ea580c;font-weight:600;':''}">${
+                    isIdCell ? '⚠ '+(c||'—') : (c||'<span style="color:#cbd5e1;">—</span>')
+                }</td>`;
+            }).join('')}
+        </tr>`;
+    }).join('');
     if (rows.length > 5) {
         tb.innerHTML += `<tr><td colspan="${header.length+1}" style="text-align:center;color:#94a3b8;font-size:.72rem;padding:6px;">... +${rows.length-5}</td></tr>`;
     }

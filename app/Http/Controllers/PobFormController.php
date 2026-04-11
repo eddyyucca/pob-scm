@@ -166,11 +166,17 @@ class PobFormController extends Controller
                 $rowErrors[] = "Nama terlalu pendek";
             }
 
-            // ID opsional — jika diisi cek panjang dan duplikat
+            // ID opsional — jika diisi cek panjang, format, dan duplikat
             if (!empty($idNumber)) {
                 if (strlen($idNumber) < 3) {
                     $rowErrors[] = "Nomor ID terlalu pendek (minimal 3 karakter)";
                 } else {
+                    // Validasi format MinePermit: wajib berawalan C
+                    if ($idType === 'minepermit' && !preg_match('/^C/i', $idNumber)) {
+                        $rowErrors[] = "Nomor MinePermit '{$idNumber}' harus berawalan 'C'. "
+                            . "Jika ini adalah NIK/KTP, isi kolom Tipe dengan 'visitor'";
+                    }
+
                     $idKey = strtoupper(trim($idNumber));
                     if (isset($seenIds[$idKey])) {
                         $rowErrors[] = "Nomor ID '{$idNumber}' duplikat dengan baris {$seenIds[$idKey]}";
