@@ -33,6 +33,9 @@
                 <a href="{{ route('report.index') }}?view=monthly" class="{{ $view==='monthly'?'on':'' }}">Bulanan</a>
                 <a href="{{ route('report.index') }}?view=yearly" class="{{ $view==='yearly'?'on':'' }}">Tahunan</a>
             </div>
+            <a href="{{ route('report.export-employees') }}" class="btn btn-sm btn-success" style="border-radius:8px;font-size:.78rem;">
+                <i class="bi bi-file-earmark-excel me-1"></i>Download Excel Karyawan
+            </a>
         </div>
     </div>
 
@@ -68,10 +71,10 @@
     {{-- Stat Cards --}}
     <div class="row g-3 mb-3">
         @php $scards = [
-            ['Total POB Minggu Ini',     number_format((int)$totalPob),  (int)$pobDiff, 'bi-people-fill',    '#2563eb','#eff6ff'],
-            ['Total Manpower',           number_format((int)$totalMp),   (int)$mpDiff,  'bi-person-workspace','#16a34a','#f0fdf4'],
-            ['Perusahaan Lapor Cukup',   $metMinimum.' perusahaan', null,     'bi-check-circle',   '#16a34a','#f0fdf4'],
-            ['Belum Cukup / Tidak Lapor',($notMetMinimum + $notReported->count()).' perusahaan', null,'bi-exclamation-circle','#dc2626','#fef2f2'],
+            ['Total POB (Data Terakhir)',  number_format((int)$totalPob),  (int)$pobDiff, 'bi-people-fill',    '#2563eb','#eff6ff'],
+            ['Total Manpower (Data Terakhir)', number_format((int)$totalMp),(int)$mpDiff,'bi-person-workspace','#16a34a','#f0fdf4'],
+            ['Perusahaan Lapor Cukup',    $metMinimum.' perusahaan', null,      'bi-check-circle',   '#16a34a','#f0fdf4'],
+            ['Belum Cukup / Tidak Lapor', ($notMetMinimum + $notReported->count()).' perusahaan', null,'bi-exclamation-circle','#dc2626','#fef2f2'],
         ]; @endphp
         @foreach($scards as $c)
         <div class="col-6 col-xl-3">
@@ -103,6 +106,7 @@
             <div>📅 Periode: <strong>{{ $weekStart->format('d M Y') }}</strong> – <strong>{{ $weekEnd->format('d M Y') }}</strong></div>
             <div>📅 Pembanding: <strong>{{ $prevStart->format('d M') }}</strong> – <strong>{{ $prevEnd->format('d M Y') }}</strong></div>
             <div>🎯 Minimal lapor: <strong>{{ $minDays }} hari</strong> (Senin–Sabtu)</div>
+            <div style="color:#7c3aed;font-weight:600;">📌 POB & MP ditampilkan dari laporan terakhir tiap perusahaan</div>
         </div>
     </div>
 
@@ -139,13 +143,11 @@
                     <tr>
                         <th class="px-3 py-2">Perusahaan</th>
                         <th class="text-center">Hari Lapor</th>
-                        <th class="text-center">Status</th>
-                        <th class="text-end">POB</th>
+                        <th class="text-end">POB Terakhir</th>
                         <th class="text-end">vs Lalu</th>
-                        <th class="text-end">Manpower</th>
+                        <th class="text-end">Manpower Terakhir</th>
                         <th class="text-end">vs Lalu</th>
-                        <th class="text-end">Avg POB/hari</th>
-                        <th class="text-center">Laporan Terakhir</th>
+                        <th class="text-center">Tanggal Laporan Terakhir</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -156,13 +158,6 @@
                         <span style="font-weight:600;color:{{ $r->days_reported >= $minDays ? '#16a34a' : '#ea580c' }};">
                             {{ $r->days_reported }}/{{ $minDays }}
                         </span>
-                    </td>
-                    <td class="text-center">
-                        @if($r->met_minimum)
-                        <span class="badge-ok">✔ Cukup</span>
-                        @else
-                        <span class="badge-no">✖ Kurang</span>
-                        @endif
                     </td>
                     <td class="text-end fw-bold" style="color:#2563eb;">{{ number_format((int)($r->total_pob)) }}</td>
                     <td class="text-end">
@@ -180,20 +175,19 @@
                             @else<span class="diff-eq">=</span>@endif
                         @else<span style="color:#cbd5e1;">–</span>@endif
                     </td>
-                    <td class="text-end" style="color:#7c3aed;">{{ $r->avg_pob }}</td>
                     <td class="text-center text-muted" style="font-size:.75rem;">
                         {{ $r->last_report ? \Carbon\Carbon::parse($r->last_report)->format('d M Y') : '-' }}
                     </td>
                 </tr>
                 @empty
-                <tr><td colspan="9" class="text-center py-4 text-muted">Belum ada data untuk minggu ini</td></tr>
+                <tr><td colspan="7" class="text-center py-4 text-muted">Belum ada data untuk minggu ini</td></tr>
                 @endforelse
                 </tbody>
                 @if($rows->count() > 0)
                 <tfoot style="background:#f8fafc;font-size:.8rem;font-weight:700;">
                     <tr>
                         <td class="px-3 py-2">TOTAL</td>
-                        <td></td><td></td>
+                        <td></td>
                         <td class="text-end" style="color:#2563eb;">{{ number_format((int)($totalPob)) }}</td>
                         <td class="text-end">
                             @if($pobDiff > 0)<span class="diff-up">▲ +{{ number_format((int)($pobDiff)) }}</span>
@@ -206,7 +200,7 @@
                             @elseif($mpDiff < 0)<span class="diff-dn">▼ {{ number_format((int)($mpDiff)) }}</span>
                             @else<span class="diff-eq">=</span>@endif
                         </td>
-                        <td colspan="2"></td>
+                        <td></td>
                     </tr>
                 </tfoot>
                 @endif

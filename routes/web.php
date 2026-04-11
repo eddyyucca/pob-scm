@@ -70,6 +70,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/notifications',                             [NotificationController::class, 'index'])->name('notifications.index');
     Route::post('/notifications/send',                       [NotificationController::class, 'sendReminder'])->name('notifications.send');
     Route::get('/report',                                         [ReportController::class, 'index'])->name('report.index');
+    Route::get('/report/export-employees',                        [ReportController::class, 'exportEmployees'])->name('report.export-employees');
     Route::post('/notifications/send-scheduled',              [NotificationController::class, 'sendScheduled'])->name('notifications.send-scheduled');
     Route::post('/notifications/send-one',                   [NotificationController::class, 'sendOne'])->name('notifications.send-one');
     Route::post('/notifications/send-friday',                [NotificationController::class, 'sendFridayAll'])->name('notifications.send-friday');

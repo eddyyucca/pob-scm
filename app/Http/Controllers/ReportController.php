@@ -6,6 +6,11 @@ use App\Models\PobEntry;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
 
 class ReportController extends Controller
 {
@@ -39,22 +44,26 @@ class ReportController extends Controller
 
         $minDays = 6; // minimal lapor Senin-Sabtu
 
-        // Data per perusahaan untuk minggu ini
+        // Data per perusahaan untuk minggu ini — ambil data TERAKHIR saja per perusahaan
         $weekData = DB::select("
             SELECT
-                e.company_id,
-                COUNT(DISTINCT DATE(e.date))   AS days_reported,
-                SUM(e.total_pob)               AS total_pob,
-                SUM(e.total_manpower)          AS total_mp,
-                MAX(e.total_pob)               AS max_pob,
-                MIN(e.total_pob)               AS min_pob,
-                AVG(e.total_pob)               AS avg_pob,
-                MAX(e.date)                    AS last_report
-            FROM pob_entries e
-            WHERE e.date BETWEEN ? AND ?
-              AND e.id IN (SELECT MAX(id) FROM pob_entries GROUP BY company_id, DATE(date))
-            GROUP BY e.company_id
-            ORDER BY total_pob DESC
+                w.company_id,
+                w.days_reported,
+                e.total_pob,
+                e.total_manpower               AS total_mp,
+                e.date                         AS last_report
+            FROM (
+                SELECT
+                    company_id,
+                    MAX(id)                        AS last_id,
+                    COUNT(DISTINCT DATE(date))      AS days_reported
+                FROM pob_entries
+                WHERE date BETWEEN ? AND ?
+                  AND id IN (SELECT MAX(id) FROM pob_entries GROUP BY company_id, DATE(date))
+                GROUP BY company_id
+            ) AS w
+            JOIN pob_entries e ON e.id = w.last_id
+            ORDER BY e.total_pob DESC
         ", [$weekStart->toDateString(), $weekEnd->toDateString()]);
         $weekData = collect($weekData);
 
@@ -77,16 +86,24 @@ class ReportController extends Controller
         $prevStart = $weekStart->copy()->subWeek();
         $prevEnd   = $weekEnd->copy()->subWeek();
 
+        // Minggu sebelumnya — ambil data TERAKHIR saja per perusahaan
         $prevData = DB::select("
             SELECT
-                company_id,
-                SUM(total_pob)      AS total_pob,
-                SUM(total_manpower) AS total_mp,
-                COUNT(DISTINCT DATE(date)) AS days_reported
-            FROM pob_entries
-            WHERE date BETWEEN ? AND ?
-              AND id IN (SELECT MAX(id) FROM pob_entries GROUP BY company_id, DATE(date))
-            GROUP BY company_id
+                w.company_id,
+                e.total_pob,
+                e.total_manpower               AS total_mp,
+                w.days_reported
+            FROM (
+                SELECT
+                    company_id,
+                    MAX(id)                        AS last_id,
+                    COUNT(DISTINCT DATE(date))      AS days_reported
+                FROM pob_entries
+                WHERE date BETWEEN ? AND ?
+                  AND id IN (SELECT MAX(id) FROM pob_entries GROUP BY company_id, DATE(date))
+                GROUP BY company_id
+            ) AS w
+            JOIN pob_entries e ON e.id = w.last_id
         ", [$prevStart->toDateString(), $prevEnd->toDateString()]);
         $prevMap = collect($prevData)->keyBy('company_id');
 
@@ -106,9 +123,6 @@ class ReportController extends Controller
                 'days_reported' => (int)$r->days_reported,
                 'total_pob'     => (int)$r->total_pob,
                 'total_mp'      => (int)$r->total_mp,
-                'avg_pob'       => round($r->avg_pob, 1),
-                'max_pob'       => (int)$r->max_pob,
-                'min_pob'       => (int)$r->min_pob,
                 'last_report'   => $r->last_report,
                 'met_minimum'   => (int)$r->days_reported >= $minDays,
                 'pob_diff'      => $pobDiff,
@@ -226,6 +240,123 @@ class ReportController extends Controller
               'days'=>collect(),'weekInput'=>'','minDays'=>6,
               'totalPrevPob'=>$prevTotalPob,'totalPrevMp'=>$prevTotalMp,
               'prevStart'=>$prevMonthStart,'prevEnd'=>$prevMonthEnd,
+        ]);
+    }
+
+    // ── EXPORT EXCEL KARYAWAN LAST UPDATE ────────────────
+    public function exportEmployees()
+    {
+        // Ambil entry terakhir per perusahaan (aktif) — lintas waktu
+        $lastEntries = DB::select("
+            SELECT
+                c.id   AS company_id,
+                c.name AS company_name,
+                pe.id             AS entry_id,
+                pe.date           AS entry_date,
+                pe.total_pob      AS total_pob,
+                pe.total_manpower AS total_manpower
+            FROM companies c
+            LEFT JOIN (
+                SELECT company_id, MAX(id) AS last_id
+                FROM pob_entries
+                WHERE id IN (SELECT MAX(id) FROM pob_entries GROUP BY company_id, DATE(date))
+                GROUP BY company_id
+            ) AS latest ON latest.company_id = c.id
+            LEFT JOIN pob_entries pe ON pe.id = latest.last_id
+            WHERE c.is_active = 1
+            ORDER BY c.name
+        ");
+
+        $entryIds = collect($lastEntries)->whereNotNull('entry_id')->pluck('entry_id')->toArray();
+
+        // Ambil semua karyawan untuk entry terakhir tersebut
+        $empGroups = DB::table('pob_employees')
+            ->whereIn('pob_entry_id', $entryIds)
+            ->orderBy('pob_entry_id')
+            ->orderBy('name')
+            ->get()
+            ->groupBy('pob_entry_id');
+
+        // Buat spreadsheet
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('POB Karyawan Last Update');
+
+        $headers = ['No', 'Perusahaan', 'Tgl Laporan', 'Total POB', 'Total MP',
+                    'Tipe ID', 'No ID', 'Nama', 'Jabatan', 'Departemen', 'Tipe'];
+        $cols    = ['A','B','C','D','E','F','G','H','I','J','K'];
+
+        foreach ($headers as $i => $h) {
+            $sheet->setCellValue($cols[$i].'1', $h);
+        }
+
+        // Style header
+        $sheet->getStyle('A1:K1')->applyFromArray([
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '2563EB']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+        ]);
+        $sheet->getRowDimension(1)->setRowHeight(20);
+
+        $row = 2;
+        $no  = 1;
+
+        foreach ($lastEntries as $entry) {
+            $emps = $entry->entry_id ? ($empGroups->get($entry->entry_id) ?? collect()) : collect();
+
+            if ($emps->isEmpty()) {
+                $sheet->setCellValue('A'.$row, $no++);
+                $sheet->setCellValue('B'.$row, $entry->company_name);
+                $sheet->setCellValue('C'.$row, $entry->entry_date ?? 'Belum ada data');
+                $sheet->setCellValue('D'.$row, $entry->total_pob    ?? '-');
+                $sheet->setCellValue('E'.$row, $entry->total_manpower ?? '-');
+                $row++;
+            } else {
+                foreach ($emps as $emp) {
+                    $sheet->setCellValue('A'.$row, $no++);
+                    $sheet->setCellValue('B'.$row, $entry->company_name);
+                    $sheet->setCellValue('C'.$row, $entry->entry_date);
+                    $sheet->setCellValue('D'.$row, (int)$entry->total_pob);
+                    $sheet->setCellValue('E'.$row, (int)$entry->total_manpower);
+                    $sheet->setCellValue('F'.$row, $emp->id_type);
+                    $sheet->setCellValue('G'.$row, $emp->id_number);
+                    $sheet->setCellValue('H'.$row, $emp->name);
+                    $sheet->setCellValue('I'.$row, $emp->position);
+                    $sheet->setCellValue('J'.$row, $emp->department);
+                    $sheet->setCellValue('K'.$row, $emp->employee_type);
+                    $row++;
+                }
+            }
+        }
+
+        // Zebra striping & border per baris
+        for ($r = 2; $r < $row; $r++) {
+            $style = $sheet->getStyle('A'.$r.':K'.$r);
+            if ($r % 2 === 0) {
+                $style->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('F1F5F9');
+            }
+            $style->getBorders()->getAllBorders()
+                ->setBorderStyle(Border::BORDER_THIN)
+                ->getColor()->setRGB('E2E8F0');
+        }
+
+        // Auto-size kolom
+        foreach ($cols as $col) {
+            $sheet->getColumnDimension($col)->setAutoSize(true);
+        }
+
+        // Freeze header row
+        $sheet->freezePane('A2');
+
+        $filename = 'POB_Karyawan_LastUpdate_'.now()->format('Ymd_His').'.xlsx';
+        $writer   = new Xlsx($spreadsheet);
+
+        return response()->streamDownload(function () use ($writer) {
+            $writer->save('php://output');
+        }, $filename, [
+            'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Cache-Control'       => 'max-age=0',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
         ]);
     }
 
