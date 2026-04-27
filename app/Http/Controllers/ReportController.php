@@ -14,6 +14,60 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 
 class ReportController extends Controller
 {
+    private const COMPANY_ORDER = [
+        'PT Sulawesi Cahaya Mineral',
+        'PT Prima Utama Sultra',
+        'PT Mulia Rentalindo Persada',
+        'PT Jakarta Anugerah Mandiri',
+        'All Sub-Contractors PT JAM',
+        'PT Malachite International Mining',
+        'PT Garda Utama Nasional',
+        'PT Satria Jaya Sultra',
+        'PT Intertek Utama Services',
+        'PT Mitra Usaha Katiga',
+        'PT Surveyor Carbon Consulting Indonesia',
+        'PT Bagong Dekaka Makmur',
+        'PT Serasi Auto Raya',
+        'PT Transkon Jaya',
+        'PT Putra Morowali Sejahtera',
+        'PT ESG New Energy Material',
+        'MCC',
+        'PT Hillcon Jaya Sakti',
+        'PT Teknologi Infrastruktur Indonesia',
+        'PT Andalan Duta Eka Nusantara',
+        'PT Merdeka Mining Services',
+        'PT Uniteda Arkato',
+        'PT Dahana',
+        'PT Sumber Semeru Indonesia',
+        'PT Indonesia Konawe Industri Park',
+        'PT Huayue Nickel Cobalt',
+        'PT Huayue Nickel Cobalt (SLNC Project)',
+        'PT Petronesia Benimel',
+        'PT Petronesia Benimel (Infrastructure)',
+        'All Sub-Contractors PB',
+        'PT Geo Gea Mineralindo',
+        'PT Surya Pomala Utama',
+        'PT Bahana Selaras Alam',
+        'PT Bintang Mandiri Perkasa Drill',
+        'PT Tectona Mitra Utama',
+        'PT Karyaindo Ciptanusa',
+        'CTCE Group',
+        'PT Sinar Terang Mandiri',
+        'PT Tiga Putra Bungoro',
+        'PT Presisi Digital Moderen Teknologi',
+        'PT Superkrane Mitra Utama',
+        'PT Mitra Ateda Selaras',
+        'PT Mitra Cuan Abadi',
+        'PT Rajawali Emas Ancora Lestari',
+        'All Sub-Contractors Real',
+        'PT Samudera Mulia Abadi',
+        'PT Lancarjaya Maju Abadi',
+        'PT Inti Karya Pasifik',
+        'PT Bumiindo Mulia Mandiri',
+        'PT Citramegah Karunia Bersama',
+        'PT Sucofindo',
+    ];
+
     public function index(Request $request)
     {
         $view    = $request->get('view', 'weekly');   // weekly | monthly | yearly
@@ -24,6 +78,48 @@ class ReportController extends Controller
             'yearly'  => $this->yearly($request),
             default   => $this->weekly($request),
         };
+    }
+
+    public function exportCsv(Request $request)
+    {
+        [$view, $startDate, $endDate, $label] = $this->resolveExportPeriod($request);
+        $rows = $this->getCompanyLatestRows($startDate, $endDate);
+
+        $filename = 'laporan_pob_mp_'.$view.'_'.$label.'_'.now()->format('Ymd_His').'.csv';
+        $headers = [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Cache-Control' => 'no-store, no-cache',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+        ];
+
+        return response()->streamDownload(function () use ($rows) {
+            $out = fopen('php://output', 'w');
+            fwrite($out, "\xEF\xBB\xBF");
+
+            fputcsv($out, [
+                'company_id',
+                'perusahaan',
+                'total_pob',
+                'total_manpower',
+                'tanggal_laporan',
+                'pelapor',
+                'status',
+            ]);
+
+            foreach ($rows as $row) {
+                fputcsv($out, [
+                    $row->company_id,
+                    $row->perusahaan,
+                    $row->total_pob,
+                    $row->total_manpower,
+                    $row->tanggal_laporan,
+                    $row->pelapor,
+                    $row->status,
+                ]);
+            }
+
+            fclose($out);
+        }, $filename, $headers);
     }
 
     // ── WEEKLY REPORT ─────────────────────────────────────
@@ -427,5 +523,89 @@ class ReportController extends Controller
               'month'=>$year.'-01','weeklyInMonth'=>collect(),'monthRows'=>collect(),
               'monthStart'=>Carbon::create($year,1,1),'monthEnd'=>Carbon::create($year,12,31),
         ]);
+    }
+
+    private function getCompanyLatestRows(string $startDate, string $endDate)
+    {
+        $fieldList = implode("', '", array_map(fn($name) => str_replace("'", "\\'", $name), self::COMPANY_ORDER));
+
+        return collect(DB::select("
+            SELECT
+                c.id AS company_id,
+                c.name AS perusahaan,
+                COALESCE(e.total_pob, 0) AS total_pob,
+                COALESCE(e.total_manpower, 0) AS total_manpower,
+                e.date AS tanggal_laporan,
+                e.informed_by AS pelapor,
+                CASE
+                    WHEN e.id IS NULL THEN 'Belum Lapor'
+                    ELSE 'Sudah Lapor'
+                END AS status
+            FROM companies c
+            LEFT JOIN (
+                SELECT
+                    x.company_id,
+                    MAX(x.id) AS last_id
+                FROM pob_entries x
+                WHERE x.date BETWEEN ? AND ?
+                  AND x.id IN (
+                      SELECT MAX(p.id)
+                      FROM pob_entries p
+                      GROUP BY p.company_id, DATE(p.date)
+                  )
+                GROUP BY x.company_id
+            ) latest ON latest.company_id = c.id
+            LEFT JOIN pob_entries e ON e.id = latest.last_id
+            WHERE c.is_active = 1
+            ORDER BY FIELD(c.name, '{$fieldList}'), c.name
+        ", [$startDate, $endDate]));
+    }
+
+    private function resolveExportPeriod(Request $request): array
+    {
+        $view = $request->get('view', 'weekly');
+
+        return match ($view) {
+            'monthly' => $this->resolveMonthlyExportPeriod($request),
+            'yearly' => $this->resolveYearlyExportPeriod($request),
+            default => $this->resolveWeeklyExportPeriod($request),
+        };
+    }
+
+    private function resolveWeeklyExportPeriod(Request $request): array
+    {
+        $weekInput = $request->get('week', now()->format('o-\WW'));
+        [$yr, $wn] = explode('-W', strtoupper($weekInput));
+        $wn = str_pad($wn, 2, '0', STR_PAD_LEFT);
+
+        try {
+            $start = Carbon::now()->setISODate((int) $yr, (int) $wn)->startOfWeek();
+            $end = $start->copy()->endOfWeek();
+        } catch (\Exception $e) {
+            $start = Carbon::now()->startOfWeek();
+            $end = Carbon::now()->endOfWeek();
+        }
+
+        return ['weekly', $start->toDateString(), $end->toDateString(), $start->format('Ymd').'_'.$end->format('Ymd')];
+    }
+
+    private function resolveMonthlyExportPeriod(Request $request): array
+    {
+        $month = $request->get('month', now()->format('Y-m'));
+        [$yr, $mo] = explode('-', $month);
+
+        $start = Carbon::create($yr, $mo, 1)->startOfMonth();
+        $end = $start->copy()->endOfMonth();
+
+        return ['monthly', $start->toDateString(), $end->toDateString(), $start->format('Ym')];
+    }
+
+    private function resolveYearlyExportPeriod(Request $request): array
+    {
+        $year = (int) $request->get('year', now()->year);
+        $start = Carbon::create($year, 1, 1)->startOfYear();
+        $end = $start->copy()->endOfYear();
+
+        return ['yearly', $start->toDateString(), $end->toDateString(), (string) $year];
     }
 }

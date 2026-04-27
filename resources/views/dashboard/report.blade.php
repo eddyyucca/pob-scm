@@ -33,6 +33,9 @@
                 <a href="{{ route('report.index') }}?view=monthly" class="{{ $view==='monthly'?'on':'' }}">Bulanan</a>
                 <a href="{{ route('report.index') }}?view=yearly" class="{{ $view==='yearly'?'on':'' }}">Tahunan</a>
             </div>
+            <a href="{{ route('report.export-csv', request()->query()) }}" class="btn btn-sm btn-outline-primary" style="border-radius:8px;font-size:.78rem;">
+                <i class="bi bi-filetype-csv me-1"></i>Download CSV Laporan
+            </a>
             <a href="{{ route('report.export-employees') }}" class="btn btn-sm btn-success" style="border-radius:8px;font-size:.78rem;">
                 <i class="bi bi-file-earmark-excel me-1"></i>Download Excel Karyawan
             </a>
